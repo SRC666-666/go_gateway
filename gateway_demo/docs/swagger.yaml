@@ -1,0 +1,62 @@
+definitions:
+  dto.AdminLoginInput:
+    properties:
+      password:
+        example: "123456"
+        type: string
+      username:
+        example: admin
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  dto.AdminLoginOutput:
+    properties:
+      token:
+        description: 因为是返回值所以validate中不需要设置任何信息
+        example: token
+        type: string
+    type: object
+  middleware.Response:
+    properties:
+      data: {}
+      errmsg:
+        type: string
+      errno:
+        type: integer
+      stack: {}
+      trace_id: {}
+    type: object
+info:
+  contact: {}
+paths:
+  /admin_login/login:
+    post:
+      consumes:
+      - application/json
+      description: 管理员登录
+      operationId: /admin_login/login
+      parameters:
+      - description: body
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.AdminLoginInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success
+          schema:
+            allOf:
+            - $ref: '#/definitions/middleware.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.AdminLoginOutput'
+              type: object
+      summary: 管理员登录
+      tags:
+      - 管理员接口
+swagger: "2.0"
