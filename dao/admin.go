@@ -38,7 +38,7 @@ func (t *Admin) TableName() string {
 func (t *Admin) Find(c *gin.Context, tx *gorm.DB, search *Admin) (*Admin, error) {
 	out := &Admin{}
 	// err := tx.WithContext(c).Where("id = ?", id).Find(area).Error
-	err := tx.SetCtx(public.GetGinTraceContext(c)).Where(search).Find(area).Error
+	err := tx.SetCtx(public.GetGinTraceContext(c)).Where(search).Find(out).Error
 	if err != nil {
 		return nil, err
 	}
