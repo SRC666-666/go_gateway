@@ -11,7 +11,7 @@ import (
 
 type ServiceInfo struct {
 	ID          int       `json:"id" gorm:"primary_key" description:"自增主键"`
-	LoadType    string    `json:"load_type" gorm:"column:load_type" description:"负载类型 0=http 1=tcp 2=grpc"`
+	LoadType    int       `json:"load_type" gorm:"column:load_type" description:"负载类型 0=http 1=tcp 2=grpc"`
 	ServiceName string    `json:"service_name" gorm:"column:service_name" description:"服务名称"`
 	ServiceDesc string    `json:"service_desc" gorm:"column:service_desc" description:"服务描述"`
 	UpdatedAt   time.Time `json:"update_at" gorm:"column:update_at" description:"更新时间"`
@@ -48,7 +48,7 @@ func (t *ServiceInfo) PageList(c *gin.Context, tx *gorm.DB, param *dto.ServiceLi
 	if param.Info != "" {
 		query = query.Where("(service_name like ? or service_desc like ?)", "%"+param.Info+"%", "%"+param.Info+"%")
 	}
-	if err := query.Limit(param.PageSize).Offset(offset).Find(&list).Error; err != nil && err != gorm.ErrRecordNotFound {
+	if err := query.Limit(param.PageSize).Offset(offset).Order("id desc").Find(&list).Error; err != nil && err != gorm.ErrRecordNotFound {
 		return nil, 0, err
 	}
 
@@ -91,9 +91,9 @@ func (t *ServiceInfo) ServiceDetail(c *gin.Context, tx *gorm.DB, search *Service
 
 	detail := &ServiceDeatil{
 		Info:          search,
-		Http:          httpRule,
-		TCP:           tcpRule,
-		GRPC:          grpcRule,
+		HTTPRule:      httpRule,
+		TCPRule:       tcpRule,
+		GRPCRule:      grpcRule,
 		LoadBalance:   loadBanlance,
 		AccessControl: accessControl,
 	}

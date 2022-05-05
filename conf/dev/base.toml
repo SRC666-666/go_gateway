@@ -31,3 +31,8 @@
     desc="This is a sample server celler server."
     host="127.0.0.1:8880"
     base_path=""
+
+    [clusterIP]
+    cluster_ip="127.0.0.1"
+    cluster_port="8880"
+    cluster_ssl_port="4880"
