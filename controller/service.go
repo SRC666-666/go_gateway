@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/e421083458/gateway_demo/dao"
 	"github.com/e421083458/gateway_demo/dto"
@@ -20,7 +21,10 @@ func ServiceRegist(group *gin.RouterGroup) {
 	service := &ServiceController{}
 	group.GET("/service_list", service.ServiceList)
 	group.GET("/service_delete", service.ServiceDelete)
+	group.GET("/service_detail", service.ServiceDetail)
+	group.GET("/service_stat", service.ServiceStat)
 	group.POST("/service_add_http", service.ServiceAddHTTP)
+	group.POST("/service_update_http", service.ServiceUpdateHTTP)
 }
 
 // ListPage godoc
@@ -169,7 +173,7 @@ func (service *ServiceController) ServiceDelete(c *gin.Context) {
 // @Produce  json
 // @Param body body dto.ServiceAddHTTPInput true "body"
 // @Success 200 {object} middleware.Response{data=string} "success"
-// @Router /admin/admin_info [post]
+// @Router /service/service_add_http[post]
 func (service *ServiceController) ServiceAddHTTP(c *gin.Context) {
 
 	params := &dto.ServiceAddHTTPInput{}
@@ -262,4 +266,189 @@ func (service *ServiceController) ServiceAddHTTP(c *gin.Context) {
 
 	//执行成功的输出
 	middleware.ResponseSuccess(c, "")
+}
+
+// ServiceUpdateHTTP godoc
+// @Summary 更新TTP服务
+// @Description 更新HTTP服务
+// @Tags 服务管理
+// @ID /service/service_update_http
+// @Accept  json
+// @Produce  json
+// @Param body body dto.ServiceUpdateHTTPInput true "body"
+// @Success 200 {object} middleware.Response{data=string} "success"
+// @Router /service/service_update_http [post]
+func (service *ServiceController) ServiceUpdateHTTP(c *gin.Context) {
+
+	params := &dto.ServiceUpdateHTTPInput{}
+	if err := params.BindValidParam(c); err != nil {
+		middleware.ResponseError(c, 2000, err)
+		return
+	}
+
+	if len(strings.Split(params.IpList, ",")) != len(strings.Split(params.WeightList, ",")) {
+		middleware.ResponseError(c, 2001, errors.New("IP列表与权重列表数量不一致"))
+		return
+	}
+
+	tx, err := lib.GetDBPool("default")
+	if err != nil {
+		middleware.ResponseError(c, 2002, err)
+		return
+	}
+	tx = tx.Begin()
+
+	serviceInfo := &dao.ServiceInfo{ServiceName: params.ServiceName}
+	serviceInfo, err = serviceInfo.Find(c, tx, serviceInfo)
+	if err := httpRule.Save(c, tx); err != nil {
+		tx.Rollback()
+		middleware.ResponseError(c, 2003, err)
+		return
+	}
+	serviceDetail, err := serviceInfo.ServiceDetail(c, tx, serviceInfo)
+	if err != nil {
+		tx.Rollback()
+		middleware.ResponseError(c, 2004, errors.New("服务不存在..."))
+		return
+	}
+
+	//serviceModel.ID
+	httpRule := serviceDetail.HTTPRule
+	httpRule.NeedHttps = params.NeedHttps
+	httpRule.NeedStripUri = params.NeedStripUri
+	httpRule.NeedWebsocket = params.NeedWebsocket
+	httpRule.UrlRewrite = params.UrlRewrite
+	httpRule.HeaderTransfor = params.HeaderTransfor
+
+	if err := httpRule.Save(c, tx); err != nil {
+		tx.Rollback()
+		middleware.ResponseError(c, 2005, err)
+		return
+	}
+
+	accessControl := serviceDetail.AccessControl
+	accessControl.OpenAuth = params.OpenAuth
+	accessControl.BlackList = params.BlackList
+	accessControl.WhiteList = params.WhiteList
+	accessControl.ClientIPFlowLimit = params.ClientipFlowLimit
+	accessControl.ServiceFlowLimit = params.ServiceFlowLimit
+	accessControl.OpenAuth = params.OpenAuth
+
+	if err := accessControl.Save(c, tx); err != nil {
+		tx.Rollback()
+		middleware.ResponseError(c, 2006, err)
+		return
+	}
+
+	loadbalance := serviceDetail.LoadBalance
+	loadbalance.RoundType = params.RoundType
+	loadbalance.IpList = params.IpList
+	loadbalance.WeightList = params.WeightList
+	loadbalance.UpstreamConnectTimeout = params.UpstreamConnectTimeout
+	loadbalance.UpstreamHeaderTimeout = params.UpstreamHeaderTimeout
+	loadbalance.UpstreamIdleTimeout = params.UpstreamIdleTimeout
+	loadbalance.UpstreamMaxIdle = params.UpstreamMaxIdle
+
+	if err := loadbalance.Save(c, tx); err != nil {
+		tx.Rollback()
+		middleware.ResponseError(c, 2007, err)
+		return
+	}
+	tx.Commit()
+
+	//执行成功的输出
+	middleware.ResponseSuccess(c, "")
+}
+
+// ServiceDetail godoc
+// @Summary 服务删除
+// @Description 服务删除
+// @Tags 服务管理
+// @ID /service/service_detail
+// @Accept  json
+// @Produce  json
+// @Success 200 {object} middleware.Response{data=dao.ServiceDetail} "success"
+// @Router /service/service_detail[get]
+func (service *ServiceController) ServiceDetail(c *gin.Context) {
+
+	params := &dto.ServiceDeleteInput{}
+	if err := params.BindValidParam(c); err != nil {
+		middleware.ResponseError(c, 2000, err)
+		return
+	}
+
+	tx, err := lib.GetGormPool("default")
+	if err != nil {
+		middleware.ResponseError(c, 2001, err)
+		return
+	}
+
+	//读取服务基本信息
+	serviceInfo := &dao.ServiceInfo{ID: params.ID}
+	serviceInfo, err = serviceInfo.Find(c, tx, serviceInfo)
+	if err != nil {
+		middleware.ResponseError(c, 2002, err)
+		return
+	}
+	serviceDetail, err := serviceInfo.ServiceDetail(c, tx, serviceInfo)
+	if err != nil {
+		middleware.ResponseError(c, 2003, err)
+		return
+	}
+
+	//执行成功的输出
+	middleware.ResponseSuccess(c, serviceDetail)
+}
+
+// ServiceStat godoc
+// @Summary 服务统计
+// @Description 服务统计
+// @Tags 服务管理
+// @ID /service/service_stat
+// @Accept  json
+// @Produce  json
+// @Success 200 {object} middleware.Response{data=dto.ServiceStatOutput} "success"
+// @Router /service/service_stat[get]
+func (service *ServiceController) ServiceStat(c *gin.Context) {
+
+	params := &dto.ServiceDeleteInput{}
+	if err := params.BindValidParam(c); err != nil {
+		middleware.ResponseError(c, 2000, err)
+		return
+	}
+
+	tx, err := lib.GetGormPool("default")
+	if err != nil {
+		middleware.ResponseError(c, 2001, err)
+		return
+	}
+
+	//读取服务基本信息
+	serviceInfo := &dao.ServiceInfo{ID: params.ID}
+	serviceInfo, err = serviceInfo.Find(c, tx, serviceInfo)
+	if err != nil {
+		middleware.ResponseError(c, 2002, err)
+		return
+	}
+	serviceDetail, err := serviceInfo.ServiceDetail(c, tx, serviceInfo)
+	if err != nil {
+		middleware.ResponseError(c, 2003, err)
+		return
+	}
+
+	todayList := []int64{}
+	for i := 0; i <= time.Now().Hour(); i++ {
+		todayList = append(todayList, 0)
+	}
+
+	yestodayList := []int64{}
+	for i := 0; i <= 23; i++ {
+		yestodayList = append(yestodayList, 0)
+	}
+
+	//执行成功的输出
+	middleware.ResponseSuccess(c, &dto.ServiceStatOutput{
+		Today:     todayList,
+		Yesterday: yestodayList,
+	})
 }
